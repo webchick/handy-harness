@@ -9,8 +9,8 @@ The goal is to start with the simplest thing that exercises a real agentic loop,
 This repo is built **workshop-style**: each stage is a branch, so you can check one out and run it, then `git diff` against the next to see exactly what changed and why.
 
 ```bash
-git checkout stage-0-concepts   # you are here: the agentic loop, with a fake model
-git checkout stage-1-real-model # swap the fake model for a real one (Chat Completions shape)
+git checkout stage-0-concepts   # the agentic loop, with a fake model
+git checkout stage-1-real-model # you are here: swap the fake model for a real one
 git checkout stage-2-mcp        # tools via MCP (Model Context Protocol)
 git checkout stage-3-otel       # observability via OpenTelemetry
 git checkout stage-4-a2a        # (optional capstone) expose the agent over A2A
@@ -19,7 +19,7 @@ git checkout stage-4-a2a        # (optional capstone) expose the agent over A2A
 | Stage | Branch | Adds | Status |
 |-------|--------|------|--------|
 | 0 | `stage-0-concepts` | The agentic loop + normalized types + a stub (fake) model. Zero dependencies. | Done |
-| 1 | `stage-1-real-model` | A real Chat-Completions-shaped adapter (OpenAI / Ollama / vLLM / etc.) | Next |
+| 1 | `stage-1-real-model` | A real Chat-Completions-shaped adapter (OpenAI / Ollama / vLLM / etc.) | Done |
 | 2 | `stage-2-mcp` | Tools via **MCP** (Model Context Protocol) | Planned |
 | 3 | `stage-3-otel` | Observability via **OpenTelemetry** | Planned |
 | 4 | `stage-4-a2a` | Expose the agent over **A2A** (Agent2Agent) | Optional |
@@ -28,9 +28,69 @@ git checkout stage-4-a2a        # (optional capstone) expose the agent over A2A
 
 ---
 
+# Stage 1: real model adapter
+
+This stage keeps the stage 0 loop intact and swaps in a real provider adapter:
+`ChatCompletionsProvider`. It speaks the OpenAI-compatible
+`/v1/chat/completions` request shape, which is also implemented by many local
+and hosted runtimes such as Ollama, vLLM, LM Studio, llama.cpp servers, Groq,
+Together, and others.
+
+The important design point: `run()` did not need to learn about HTTP, headers,
+JSON argument strings, or provider response shapes. Those details live in
+`chat_completions_provider.py`, and the loop still only sees `Message`,
+`ToolCall`, and `ToolResult`.
+
+## Running it
+
+The default remains the offline stub, so the repo is still runnable with no
+setup:
+
+```bash
+python3 agent.py
+```
+
+To use a real Chat Completions-compatible endpoint, set:
+
+```bash
+export HANDY_PROVIDER=chat
+export HANDY_MODEL="your-model-name"
+export HANDY_API_KEY="your-api-key"          # omit for local endpoints that do not need auth
+export HANDY_BASE_URL="https://api.openai.com/v1"
+python3 agent.py
+```
+
+For a local OpenAI-compatible server, point `HANDY_BASE_URL` at that server's
+`/v1` base URL:
+
+```bash
+export HANDY_PROVIDER=chat
+export HANDY_MODEL="llama3.1"
+export HANDY_BASE_URL="http://localhost:11434/v1"
+python3 agent.py
+```
+
+You can also override the demo prompt:
+
+```bash
+HANDY_PROMPT="Use the echo tool on this text" python3 agent.py
+```
+
+## What changed from stage 0
+
+- Added `chat_completions_provider.py`, a real HTTP adapter with only standard
+  library dependencies.
+- Added `provider_from_env()` in `agent.py`, so the demo entry point can choose
+  either the stub or the real adapter.
+- Kept the agentic loop itself provider-agnostic.
+- Added unit tests covering request translation, response translation, and bad
+  tool-call argument handling.
+
+---
+
 # Stage 0: the concept
 
-This branch is the agentic loop in its purest form. There's no real AI model, no API key, no network, no dependencies — just the scaffolding, driven by a scripted stub that stands in for a model. The point is to see the *shape* of a harness with nothing else in the way.
+Stage 0 was the agentic loop in its purest form. There's no real AI model, no API key, no network, no dependencies — just the scaffolding, driven by a scripted stub that stands in for a model. The point is to see the *shape* of a harness with nothing else in the way.
 
 ## What's an agent harness?
 
@@ -113,7 +173,9 @@ In stage 0 the only translator that exists is the **Stub** — a fake model. The
 | `model_types.py` | The normalized format — the *one simple language* the loop speaks: `Role`, `Message`, `ToolCall`, `ToolResult`. The entire contract between the loop and any provider. |
 | `provider.py` | The `ModelProvider` abstract base class — one method, `complete()`. The seam the whole design hinges on. |
 | `stub_provider.py` | A scripted fake "model" that makes the only two decisions a real model makes in a loop (call a tool / give a final answer). Lets the whole loop run offline. |
+| `chat_completions_provider.py` | The stage 1 real-model adapter for OpenAI-compatible Chat Completions APIs. Translates provider messages and JSON-string tool arguments into the normalized format. |
 | `agent.py` | The harness itself: a tiny tool registry, the tool dispatcher, and the core `run()` loop. Runnable entry point. |
+| `test_chat_completions_provider.py` | Focused unit tests for the stage 1 adapter. |
 
 > Note: the types file is `model_types.py` rather than `types.py` to avoid colliding with Python's standard-library `types` module.
 
@@ -132,7 +194,7 @@ The key invariant: `arguments` is *always* a parsed `dict` and `tool_calls` is *
 
 So the edges are clear:
 
-- **No real model** — a stub stands in for one. Real providers arrive in stage 1.
+- **No vendor-native providers** — stage 1 adds one OpenAI-compatible adapter. A native Anthropic-style adapter would be a separate translator.
 - **No real context-window management** — history just grows. Truncation / summarization comes later.
 - **No parallel tool execution** — tool calls run sequentially.
 - **No streaming** — responses are returned whole.

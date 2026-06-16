@@ -3,6 +3,9 @@
 Run it:  python3 agent.py
 """
 
+import os
+
+from chat_completions_provider import ChatCompletionsProvider
 from model_types import Message, Role, ToolResult
 from stub_provider import StubProvider
 
@@ -77,10 +80,31 @@ def run(provider, user_input, system="", max_iters=10):
     return "Stopped: hit max iterations without a final answer."
 
 
+def provider_from_env():
+    """Pick a provider for the demo entry point.
+
+    The harness itself does not care which provider it gets. This helper keeps
+    stage 0 runnable offline while letting stage 1 use a real compatible API.
+    """
+    provider = os.getenv("HANDY_PROVIDER", "stub").strip().lower()
+    if provider == "stub":
+        return StubProvider()
+    if provider == "chat":
+        model = os.getenv("HANDY_MODEL")
+        if not model:
+            raise RuntimeError("HANDY_MODEL is required when HANDY_PROVIDER=chat")
+        return ChatCompletionsProvider(
+            model=model,
+            base_url=os.getenv("HANDY_BASE_URL", "https://api.openai.com/v1"),
+            api_key=os.getenv("HANDY_API_KEY"),
+        )
+    raise RuntimeError(f"Unknown HANDY_PROVIDER: {provider}")
+
+
 if __name__ == "__main__":
     answer = run(
-        provider=StubProvider(),  # swap this line for a real provider later
-        user_input="What is the meaning of life?",
+        provider=provider_from_env(),
+        user_input=os.getenv("HANDY_PROMPT", "What is the meaning of life?"),
         system="You are a helpful assistant.",
     )
     print(answer)
