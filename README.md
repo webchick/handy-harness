@@ -32,9 +32,9 @@ git checkout stage-4-a2a        # (optional capstone) expose the agent over A2A
 
 This stage keeps the stage 0 loop intact and swaps in a real provider adapter:
 `ChatCompletionsProvider`. It speaks the OpenAI-compatible
-`/v1/chat/completions` request shape, which is also implemented by many local
-and hosted runtimes such as Ollama, vLLM, LM Studio, llama.cpp servers, Groq,
-Together, and others.
+[`/v1/chat/completions` request shape](https://developers.openai.com/api/reference/chat/create),
+which is also implemented by many local and hosted runtimes such as Ollama,
+vLLM, LM Studio, llama.cpp servers, Groq, Together, and others.
 
 The important design point: `run()` did not need to learn about HTTP, headers,
 JSON argument strings, or provider response shapes. Those details live in
@@ -50,18 +50,53 @@ setup:
 python3 agent.py
 ```
 
-To use a real Chat Completions-compatible endpoint, set:
+To use a real model, you need two things:
+
+1. A model server to send requests to.
+2. The name of a model that server knows how to run.
+
+Here is a concrete hosted example using OpenAI:
 
 ```bash
 export HANDY_PROVIDER=chat
-export HANDY_MODEL="your-model-name"
-export HANDY_API_KEY="your-api-key"          # omit for local endpoints that do not need auth
+export HANDY_MODEL="gpt-5.4-mini"
+export HANDY_API_KEY="sk-..."                # replace with your real API key
 export HANDY_BASE_URL="https://api.openai.com/v1"
 python3 agent.py
 ```
 
-For a local OpenAI-compatible server, point `HANDY_BASE_URL` at that server's
-`/v1` base URL:
+What those variables mean:
+
+- `HANDY_PROVIDER` chooses which model adapter to use. This stage supports
+  `stub` for the fake offline model and `chat` for the real Chat
+  Completions-compatible adapter. If you leave it unset, the demo uses `stub`.
+- `HANDY_MODEL` is the model ID to ask for. If your provider says "unknown
+  model," replace this with a model listed in that provider's dashboard or docs.
+- `HANDY_API_KEY` is the secret token for hosted APIs. Local tools usually do
+  not need one.
+- `HANDY_BASE_URL` is the front door for the API. The provider adds
+  `/chat/completions` after this, so `https://api.openai.com/v1` becomes
+  `https://api.openai.com/v1/chat/completions`.
+
+## Running with a local model
+
+You can also run a model on your own machine. One approachable way is
+[Ollama](https://ollama.com/), which provides a local OpenAI-compatible API.
+
+Install Ollama, then download a model:
+
+```bash
+ollama pull llama3.1
+```
+
+Ollama normally starts its local server automatically. If it is not running,
+start it in another terminal:
+
+```bash
+ollama serve
+```
+
+Then run this harness against that local server:
 
 ```bash
 export HANDY_PROVIDER=chat
@@ -69,6 +104,13 @@ export HANDY_MODEL="llama3.1"
 export HANDY_BASE_URL="http://localhost:11434/v1"
 python3 agent.py
 ```
+
+That URL means:
+
+- `localhost` — this computer, not the public internet.
+- `11434` — Ollama's default port.
+- `/v1` — Ollama's OpenAI-compatible API prefix. It lets code written for the
+  OpenAI Chat Completions shape talk to Ollama using the same request format.
 
 You can also override the demo prompt:
 
@@ -164,7 +206,7 @@ Different AI companies (and open-source models) all speak slightly different dia
 +---------+   +---------+   +--------------+
 ```
 
-In stage 0 the only translator that exists is the **Stub** — a fake model. The real ones arrive in later stages. Because the [OpenAI **Chat Completions** request shape](https://platform.openai.com/docs/api-reference/chat/create) has become the de-facto lingua franca that most local runtimes (Ollama, vLLM, LM Studio, llama.cpp, Together, Groq, ...) also expose, a single Chat-Completions-shaped adapter with a configurable `base_url` covers a large swath of models — including fully open ones — with no vendor-specific code.
+In stage 0 the only translator that exists is the **Stub** — a fake model. The real ones arrive in later stages. Because the [OpenAI **Chat Completions** request shape](https://developers.openai.com/api/reference/chat/create) has become the de-facto lingua franca that most local runtimes (Ollama, vLLM, LM Studio, llama.cpp, Together, Groq, ...) also expose, a single Chat-Completions-shaped adapter with a configurable `base_url` covers a large swath of models — including fully open ones — with no vendor-specific code.
 
 ## Files
 
