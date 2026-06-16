@@ -172,6 +172,40 @@ Based on the tool output, the answer is: You said 'What is the meaning of life?'
 
 That one line is the end of a two-step conversation the harness had with the (fake) model on your behalf. Here's what happened to produce it.
 
+## Running the tests
+
+Stage 0 also has a small test suite, using only Python's built-in `unittest`
+module:
+
+```bash
+python3 -m unittest
+```
+
+You should see output like:
+
+```text
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.000s
+
+OK
+```
+
+These tests are deliberately small. They are not trying to prove that an AI
+model is smart; there is no real model in stage 0. They prove that the harness
+contract works:
+
+- `test_agent.py` checks the outside behavior of the harness: the full loop can
+  reach a final answer with `StubProvider`, the `echo` tool can run, and unknown
+  tools become readable errors instead of crashing the process.
+- `test_stub_provider.py` checks the fake model's two scripted decisions: first
+  it asks for a tool, then after a tool result appears in history, it returns a
+  final answer.
+
+That gives later stages a baseline. When stage 1 swaps in a real model adapter,
+or stage 2 swaps the plain tool registry for MCP, these tests keep the basic
+loop behavior anchored.
+
 ## How it works
 
 Each trip through the loop is **one call to the model**. This run takes two trips:
@@ -217,6 +251,8 @@ In stage 0 the only translator that exists is the **Stub** — a fake model. The
 | `stub_provider.py` | A scripted fake "model" that makes the only two decisions a real model makes in a loop (call a tool / give a final answer). Lets the whole loop run offline. |
 | `chat_completions_provider.py` | The stage 1 real-model adapter for OpenAI-compatible Chat Completions APIs. Translates provider messages and JSON-string tool arguments into the normalized format. |
 | `agent.py` | The harness itself: a tiny tool registry, the tool dispatcher, and the core `run()` loop. Runnable entry point. |
+| `test_agent.py` | Tests the harness loop and tool dispatcher from the outside. |
+| `test_stub_provider.py` | Tests the stub provider's two-step scripted behavior. |
 | `test_chat_completions_provider.py` | Focused unit tests for the stage 1 adapter. |
 
 > Note: the types file is `model_types.py` rather than `types.py` to avoid colliding with Python's standard-library `types` module.
